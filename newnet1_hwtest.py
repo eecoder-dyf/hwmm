@@ -9,6 +9,7 @@ import os
 import sys
 import numpy as np
 import math
+import cv2
 
 from typing import Any, Callable, List, Optional, Tuple, Union
 
@@ -469,7 +470,7 @@ class gmm_hyper_y1(nn.Cell):
         softmax = nn.Softmax()
         temp = softmax(temp)  #每个Mixture进行一次归一
         #self.weights = torch.reshape(temp,(-1,self.M*self.K,1,1))   #mindspore.ops.Reshape
-        self.weights = reshape(temp,(-1,self.M*self.K,1,1))   #mindspore.ops.Reshape
+        self.weights = reshape(temp, (-1,self.M*self.K,1,1))   #mindspore.ops.Reshape
         ###
         return self.sigma,self.means,self.weights
 
@@ -526,7 +527,7 @@ class gmm_hyper_y2(nn.Cell):
     def construct(self,z2,y1):
         self.up_z2 = self.upsample_layer(z2,scale_factor=4)
         #self.cat_in = torch.cat((self.up_z2,y1),dim=-3) 
-        self.cat_in = npms.concatenate((self.up_z2,y1),dim=-3) 
+        self.cat_in = npms.concatenate((self.up_z2,y1), axis=-3) 
         self.sigma = self.gmm_sigma(self.cat_in)
         self.means = self.gmm_means(self.cat_in)
         #softmax!!
@@ -535,7 +536,8 @@ class gmm_hyper_y2(nn.Cell):
         reshape = ms.ops.Reshape()
         temp = reshape(self.gmm_weights(self.cat_in), (-1, self.K, self.M,  1, 1))  # 方便后续reshape合并时同一个M的数据相邻成组
         #temp = nn.functional.softmax(temp, dim=-4)  # 每个Mixture进行一次归一
-        temp = nn.Softmax(temp)
+        softmax = nn.Softmax()
+        temp = softmax(temp)
         self.weights = reshape(temp, (-1, self.M * self.K, 1, 1))
         ###
 
@@ -611,7 +613,7 @@ class Encoder2(nn.Cell):
         # self.y = self.g_a(x)
         # self.g_a_c1 = self.g_a_conv1(x) #Tensor
         #self.pre1 = self.pre_conv(torch.cat((x1_warp,x2),dim=-3))   #ms.numpy.concatenate
-        self.pre1 = self.pre_conv(npms.concatenate((x1_warp,x2),dim=-3)) 
+        self.pre1 = self.pre_conv(npms.concatenate((x1_warp,x2), axis=-3)) 
         self.pre2 = self.pre_gdn(self.pre1)
 
         self.g_a_c1 = self.g_a_conv1(self.pre2) #直接concat
@@ -657,7 +659,7 @@ class Decoder2(nn.Cell):
         #
         self.after1 = self.after_gdn(self.g_s_c4)
         #self.after2 = self.after_conv(torch.cat((self.after1,x1_hat_warp),dim=-3))
-        self.after2 = self.after_conv(npms.concatenate((self.after1,x1_hat_warp),dim=-3))
+        self.after2 = self.after_conv(npms.concatenate((self.after1,x1_hat_warp), axis=-3))
         # self.after1 = self.after_gdn(torch.cat((self.g_s_c4, x1_hat_warp), dim=-3))
         # self.after2 = self.after_conv(self.after1)
 
@@ -666,6 +668,20 @@ class Decoder2(nn.Cell):
         return self.x_hat#,self.g_s_g1,self.g_s_g2,self.g_s_g3
 
 ###########################################################################
+#由于kornia库支持的warp_perspective方法输入比cv2的多一维B，因此重写基于cv2的warpPerspective
+def WarpPerspective(src, M, dsize):
+    B = src.shape[0]
+    warp = src
+    for i in range(B):
+        #print(src[i].shape, M[i].shape)
+        #要先将CHW通道转换成HWC通道进行处理再转回来
+        src_hwc = np.transpose(src[i],(1,2,0))
+        warp_hwc = cv2.warpPerspective(src_hwc,M[i],dsize)
+        warp[i] = np.transpose(warp_hwc,(2,0,1))
+
+    return warp
+
+
 
 class HSIC(CompressionModel):
     def __init__(self,N=128,M=192,K=5,**kwargs): #'cuda:0' or 'cpu'
@@ -716,7 +732,11 @@ class HSIC(CompressionModel):
 
         #############################################
         #encoder
-        x1_warp = kornia.warp_perspective(x1, h_matrix, (x1.shape[-2],x1.shape[-1]))
+        x1_np = x1.asnumpy()
+        h_matrix_np = h_matrix.asnumpy()
+        x1_warp_np = WarpPerspective(x1_np, h_matrix_np, (x1.shape[-2],x1.shape[-1]))
+        #x1_warp = kornia.warp_perspective(x1, h_matrix, (x1.shape[-2],x1.shape[-1]))
+        x1_warp = ms.Tensor(x1_warp_np)
         y2 = self.encoder2(x1_warp,x2)
         ##end encoder
 
@@ -729,7 +749,10 @@ class HSIC(CompressionModel):
         # end hyper for pic2
 
         # decoder
-        x1_hat_warp = kornia.warp_perspective(x1_hat, h_matrix, (x1_hat.shape[-2],x1_hat.shape[-1]))
+        #x1_hat_warp = kornia.warp_perspective(x1_hat, h_matrix, (x1_hat.shape[-2],x1_hat.shape[-1]))
+        x1_hat_np = x1_hat.asnumpy()
+        x1_hat_warp_np = WarpPerspective(x1_hat_np, h_matrix_np, (x1_hat.shape[-2],x1_hat.shape[-1]))
+        x1_hat_warp = ms.Tensor(x1_hat_warp_np)
         x2_hat = self.decoder2(y2_hat,x1_hat_warp)
         #end decoder
         # print(x1.size())
