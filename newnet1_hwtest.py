@@ -50,7 +50,7 @@ class EntropyModel(nn.Cell):
         return output
 
 
-class EntropyBottleneck():
+class EntropyBottleneck(EntropyModel):
     def __init__(
         self,
         channels: int,
@@ -60,12 +60,18 @@ class EntropyBottleneck():
         filters: Tuple[int, ...] = (3, 3, 3, 3),
         **kwargs: Any,        
     ):
+        super().__init__()
         self.channels = int(channels)
         self.filters = tuple(int(f) for f in filters)
         self.init_scale = float(init_scale)
         self.tail_mass = float(tail_mass)
 
-class GaussianMixtureConditional():
+    def construct(self,input):
+        hat = input 
+        likelihoods = input
+        return hat, likelihoods
+
+class GaussianMixtureConditional(EntropyModel):
     def __init__(self,
                  K,
                  scale_table=None,
@@ -80,6 +86,12 @@ class GaussianMixtureConditional():
         #ywz for mixture numbers:K
         self.K = K
 
+    def construct(self,input,gmm1,gmm2,gmm3):
+        hat = input
+        likeliloods = input
+        return hat, likeliloods
+
+
 class GDN(nn.Cell):
     def __init__(self,
                  in_channels,
@@ -91,6 +103,9 @@ class GDN(nn.Cell):
         beta_min = float(beta_min)
         gamma_init = float(gamma_init)
         self.inverse = bool(inverse)
+
+    def construct(self, x):
+        return x
 
 def conv(in_channels, out_channels, kernel_size=5, stride=2):
     return nn.Conv2d(in_channels,
@@ -360,7 +375,7 @@ class encode_hyper(nn.Cell):
     #def forward(self,y):
     def construct(self,y):
         #self.y_abs = torch.abs(y)   #mindspore.ops.Abs
-        self.y_abs = ms.ops.abs(y)
+        self.y_abs = ms.Tensor.abs(y)
         self.z = self.encode_hyper(self.y_abs)
         return self.z
 
@@ -542,11 +557,11 @@ class Encoder1(nn.Cell):
     def construct(self, x):
         # self.y = self.g_a(x)
         self.g_a_c1 = self.g_a_conv1(x) #Tensor
-        self.g_a_g1 = self.g_a_gdn1(self.g_a_c1)
+        self.g_a_g1 = self.g_a_gdn1.construct(self.g_a_c1)
         self.g_a_c2 = self.g_a_conv2(self.g_a_g1)  # Tensor
-        self.g_a_g2 = self.g_a_gdn2(self.g_a_c2)
+        self.g_a_g2 = self.g_a_gdn2.construct(self.g_a_c2)
         self.g_a_c3 = self.g_a_conv3(self.g_a_g2)  # Tensor
-        self.g_a_g3 = self.g_a_gdn3(self.g_a_c3)
+        self.g_a_g3 = self.g_a_gdn3.construct(self.g_a_c3)
         self.g_a_c4 = self.g_a_conv4(self.g_a_g3)  # Tensor
         self.y = self.g_a_c4
         return self.y,self.g_a_g1,self.g_a_g2,self.g_a_g3
@@ -782,9 +797,12 @@ class HSIC(CompressionModel):
 
 if __name__ == '__main__':
     ones = ms.ops.Ones()
-    img = ones((192,192,2,2),ms.float32)
+    zeros = ms.ops.Zeros()
+    img1 = ones((16,3,256,256),ms.float32)
+    img2 = zeros((16,3,256,256),ms.float32)
+    H = ones((16,3,3),ms.float32)
     model = HSIC()
-    a = model.construct(img)
+    a = model.construct(img1,img2,H)
     print(a)
 
 
