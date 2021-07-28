@@ -37,6 +37,7 @@ import kornia
 # from compressai.models import CompressionModel
 # from compressai.models.utils import conv, deconv
 from PIL import Image
+'''以下为凑数内容'''
 class EntropyModel(nn.Cell):
     def __init__(self,
                  likelihood_bound=1e-9,
@@ -124,7 +125,7 @@ def deconv(in_channels, out_channels, kernel_size=5, stride=2):
                               #output_padding=stride - 1,
                               pad_mode='pad',
                               padding=(kernel_size//2, kernel_size//2 - stride + 1, kernel_size//2, kernel_size//2 - stride + 1) )
-
+'''凑数内容结束'''
 #class CompressionModel(nn.Module):  #msp里好像使用nn.cell
 class CompressionModel(nn.Cell):
     """Base class for constructing an auto-encoder with at least one entropy
