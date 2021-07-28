@@ -27,9 +27,10 @@ from mindspore import Tensor
 import mindspore.nn.optim as optim
 # import torch.nn as nn
 import mindspore.nn as nn
-import kornia
-# from torch.utils.data import DataLoader
+import mindspore.common.initializer as Init
 
+# import kornia
+# from torch.utils.data import DataLoader
 # from torchvision import transforms
 
 # from compressai.datasets import ImageFolder
@@ -37,6 +38,8 @@ import kornia
 # from compressai.models import CompressionModel
 # from compressai.models.utils import conv, deconv
 from PIL import Image
+
+#####################################################################
 '''以下为凑数内容'''
 class EntropyModel(nn.Cell):
     def __init__(self,
@@ -126,6 +129,8 @@ def deconv(in_channels, out_channels, kernel_size=5, stride=2):
                               pad_mode='pad',
                               padding=(kernel_size//2, kernel_size//2 - stride + 1, kernel_size//2, kernel_size//2 - stride + 1) )
 '''凑数内容结束'''
+#############################################################################
+
 #class CompressionModel(nn.Module):  #msp里好像使用nn.cell
 class CompressionModel(nn.Cell):
     """Base class for constructing an auto-encoder with at least one entropy
@@ -161,11 +166,11 @@ class CompressionModel(nn.Cell):
         for m in self.cells():
             #if isinstance(m, (nn.Conv2d, nn.ConvTranspose2d)):  #nn.Conv2d,nn.Conv2dTranspose
             if isinstance(m, (nn.Conv2d, nn.Conv2dTranspose)):
-                #nn.init.kaiming_normal_(m.weight)   #貌似要改成weight_init he_uniform;mindspore.common.initializer.HeNormal
-                ms.common.initializer.HeNormal(m.weight)
+                #nn.init.kaiming_normal_(m.weight)   #貌似要改成mindspore.common.initializer.HeNormal
+                m.weight = Init.initializer(Init.HeNormal(), m.weight.shape)
                 if m.bias is not None:
-                    #nn.init.zeros_(m.bias)  #同weight，改成bias_init=zeros;
-                    ms.common.initializer.Zero(m.bias)
+                    #nn.init.zeros_(m.bias)  #同weight
+                    m.bias = Init.initializer(Init.Zero(), m.bias.shape)
 
     #def forward(self, *args):
     def construct(self, *args):
